@@ -1,0 +1,11 @@
+{
+  "name": "@bank/pdf-renderer",
+  "version": "0.0.1",
+  "description": "Arvantis-branded luxury PDF generator (HTML/Tailwind + Handlebars + Puppeteer)",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo 'Phase 4 — tests not written yet'"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@bank/playwright-flows",
+  "version": "0.0.1",
+  "description": "Playwright login + report-pull flows for FSN and IIQ — headed by default",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo 'Phase 2 — tests not written yet'"
+  }
+}

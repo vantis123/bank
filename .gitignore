@@ -1,0 +1,29 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+.next/
+out/
+coverage/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Bank runtime data — contains client creds + parsed reports, never commit
+.bank-data/
+client-reports/
+*.pdf
+*.report.json
+
+# Playwright artifacts
+playwright-report/
+test-results/
+.playwright/
+
+# IDE
+.vscode/
+.idea/
+*.swp

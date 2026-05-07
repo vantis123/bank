@@ -1,0 +1,12 @@
+{
+  "name": "@bank/dashboard",
+  "version": "0.0.1",
+  "description": "Bank dashboard — local Next.js UI for non-AI members",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "echo 'Phase 5 — dashboard not built yet. See docs/BUILD-PLAN.md'",
+    "build": "echo 'Phase 5'"
+  }
+}

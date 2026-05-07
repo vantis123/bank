@@ -1,0 +1,12 @@
+{
+  "name": "@bank/landing",
+  "version": "0.0.1",
+  "description": "bank.arvantis.tech — public landing page with two-track download and book-a-call CTA",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "echo 'Phase 8 — landing page not built yet. See docs/BUILD-PLAN.md'",
+    "build": "echo 'Phase 8'"
+  }
+}

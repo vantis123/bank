@@ -1,0 +1,11 @@
+{
+  "name": "@bank/parsers",
+  "version": "0.0.1",
+  "description": "FSN + IIQ credit report PDF text parsers",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo 'Phase 1 — tests not written yet'"
+  }
+}

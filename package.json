@@ -1,0 +1,22 @@
+{
+  "name": "bank",
+  "version": "0.0.1",
+  "description": "Bank by Arvantis — credit report intelligence for credit pros",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo 'Phase 0 scaffold — run a workspace directly: npm run dev -w @bank/dashboard'",
+    "build": "echo 'Build not implemented yet (Phase 7)'",
+    "test": "echo 'Tests not implemented yet'",
+    "phase": "cat docs/BUILD-PLAN.md | head -40"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "Arvantis Tech",
+  "license": "UNLICENSED"
+}

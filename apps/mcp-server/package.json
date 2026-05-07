@@ -1,0 +1,12 @@
+{
+  "name": "@bank/mcp-server",
+  "version": "0.0.1",
+  "description": "Bank MCP server — exposes pull_fsn / pull_iiq / analyze_report tools to Claude / Codex / Cursor",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "echo 'Phase 6 — MCP server not built yet. See docs/BUILD-PLAN.md'",
+    "build": "echo 'Phase 6'"
+  }
+}
