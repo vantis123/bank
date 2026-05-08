@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "pdf-parse": "^2.4.5",
     "playwright": "^1.48.0"
   },
   "devDependencies": {

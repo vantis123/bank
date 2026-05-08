@@ -11,8 +11,23 @@
  */
 
 import type { Page } from "playwright";
+import { readFile } from "node:fs/promises";
 import { sleep, scrollPass, findVisible, snap } from "./util.ts";
 import type { CaptureSource, FlowContext } from "./types.ts";
+
+async function extractPdfText(path: string): Promise<string> {
+  try {
+    // pdf-parse's index.js runs a self-test on import; use the inner module.
+    // @ts-expect-error — no types for the inner path
+    const mod = await import("pdf-parse/lib/pdf-parse.js");
+    const pdfParse = (mod as any).default ?? (mod as any);
+    const buf = await readFile(path);
+    const out = await pdfParse(buf);
+    return (out && out.text) || "";
+  } catch {
+    return "";
+  }
+}
 
 interface FSNSite {
   label: "new" | "legacy";
@@ -198,7 +213,7 @@ export async function fsnCaptureReport(
 
   // Try the print-button strategy first (fastest, gets a real PDF)
   const printResult = await tryPrintFlow(ctx);
-  if (printResult.captured) {
+  if (printResult.captured && printResult.text.length >= 200) {
     ctx.log(`  -> PRINT CAPTURED via ${printResult.source} (${printResult.text.length} chars)`);
     return {
       text: printResult.text,
@@ -206,7 +221,11 @@ export async function fsnCaptureReport(
       pdfPath: printResult.pdfPath,
     };
   }
-  ctx.log(`  -> Print path no-op (${printResult.reason}) — falling back`);
+  if (printResult.captured) {
+    ctx.log(`  -> Print path returned thin text (${printResult.text.length} chars) — falling back to tradeline loop`);
+  } else {
+    ctx.log(`  -> Print path no-op (${printResult.reason}) — falling back`);
+  }
 
   // Fallback: per-tradeline expand-capture-collapse loop
   const seeDetailsCount = await ctx.page.locator('text="See Details"').count();
@@ -344,7 +363,7 @@ async function tryPrintFlow(ctx: FlowContext): Promise<PrintResult> {
       await scrollPass(p, 20);
       await sleep(1000);
 
-      const text = await p.evaluate(() => document.body?.innerText || "");
+      let text = await p.evaluate(() => document.body?.innerText || "");
       const pdfPath = `${ctx.sandboxDir}/fsn-print-popup-${Date.now()}.pdf`;
       await p.pdf({
         path: pdfPath,
@@ -352,6 +371,14 @@ async function tryPrintFlow(ctx: FlowContext): Promise<PrintResult> {
         printBackground: true,
         margin: { top: "0.4in", bottom: "0.4in", left: "0.4in", right: "0.4in" },
       });
+
+      // If the popup is a PDF viewer (canvas-based, no text DOM), pull text
+      // from the PDF we just rendered.
+      if (text.length < 200) {
+        const fromPdf = await extractPdfText(pdfPath);
+        if (fromPdf.length > text.length) text = fromPdf;
+      }
+
       return {
         captured: true,
         source: "fsn-print-popup",
@@ -364,10 +391,11 @@ async function tryPrintFlow(ctx: FlowContext): Promise<PrintResult> {
   }
 
   if (downloadPath) {
+    const text = await extractPdfText(downloadPath);
     return {
       captured: true,
       source: "fsn-print-download",
-      text: "", // text extracted later via @bank/parsers from the PDF if needed
+      text,
       pdfPath: downloadPath,
     };
   }
