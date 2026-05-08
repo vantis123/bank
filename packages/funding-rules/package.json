@@ -1,11 +1,14 @@
 {
   "name": "@bank/funding-rules",
   "version": "0.0.1",
-  "description": "Phillip's funding estimation rules — pure deterministic functions, no AI",
+  "description": "Phillip's funding qualification rules — deterministic, no AI",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "test": "echo 'Phase 3 — tests not written yet'"
+  },
+  "dependencies": {
+    "@bank/parsers": "*"
   }
 }

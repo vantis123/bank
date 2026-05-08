@@ -14,9 +14,18 @@ Thumbs.db
 
 # Bank runtime data — contains client creds + parsed reports, never commit
 .bank-data/
+.bank-sandbox/
+.bank/
 client-reports/
 *.pdf
+!packages/pdf-renderer/sample/*.pdf
 *.report.json
+
+# Real client credit reports — kept local for parser dev, never committed
+packages/parsers/fixtures/*.txt
+packages/parsers/fixtures/*.json
+packages/parsers/fixtures/*.pdf
+!packages/parsers/fixtures/.gitkeep
 
 # Playwright artifacts
 playwright-report/

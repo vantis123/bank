@@ -1,11 +1,21 @@
 {
   "name": "@bank/pdf-renderer",
   "version": "0.0.1",
-  "description": "Arvantis-branded luxury PDF generator (HTML/Tailwind + Handlebars + Puppeteer)",
+  "description": "Arvantis-branded luxury PDF generator (HTML/Handlebars + Playwright)",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
-    "test": "echo 'Phase 4 — tests not written yet'"
+    "test": "echo 'Phase 4 — tests not written yet'",
+    "e2e:adam": "tsx test/e2e-adam.ts"
+  },
+  "dependencies": {
+    "@bank/funding-rules": "*",
+    "@bank/parsers": "*",
+    "handlebars": "^4.7.8",
+    "playwright": "^1.48.0"
   }
 }

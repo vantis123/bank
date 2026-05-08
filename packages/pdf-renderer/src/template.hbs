@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bank — {{client.name}} Funding Qualification</title>
+<style>
+  @page { size: Letter; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    color: #1a1a1a;
+    background: #fafaf7;
+  }
+  .page {
+    width: 8.5in;
+    height: 11in;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  .cover {
+    background: linear-gradient(180deg, #0a0a0a 0%, #0a1a2a 100%);
+    color: #fafaf7;
+    padding: 0.8in 0.7in;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .cover-logo-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cover-logo-img {
+    width: 1.6in;
+    height: 1.6in;
+    background: #fff;
+    border-radius: 50%;
+    padding: 0.05in;
+    box-shadow:
+      0 0 0 3px rgba(56, 189, 248, 0.4),
+      0 0 60px rgba(56, 189, 248, 0.25);
+  }
+  .header-logo-img {
+    width: 0.42in;
+    height: 0.42in;
+    margin-right: 0.08in;
+    vertical-align: middle;
+  }
+  .header-mark-row {
+    display: flex;
+    align-items: center;
+  }
+  .cover-rule { height: 1px; background: #38BDF8; margin: 0.2in 0; width: 100%; }
+  .cover-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+  .cover-title {
+    font-family: Georgia, serif;
+    font-size: 38pt;
+    font-weight: 400;
+    line-height: 1.1;
+    color: #fafaf7;
+    margin-bottom: 0.3in;
+  }
+  .cover-title em {
+    color: #38BDF8;
+    font-style: italic;
+    font-weight: 300;
+  }
+  .cover-subtitle {
+    font-size: 11pt;
+    letter-spacing: 0.18em;
+    color: #38BDF8;
+    text-transform: uppercase;
+    margin-bottom: 0.6in;
+  }
+  .cover-client {
+    font-family: Georgia, serif;
+    font-size: 24pt;
+    color: #fafaf7;
+    font-weight: 400;
+    margin-bottom: 0.1in;
+  }
+  .cover-meta { font-size: 10pt; color: #889; letter-spacing: 0.1em; }
+  .cover-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 8pt;
+    color: #667;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .cover-footer .member { color: #38BDF8; }
+
+  .interior {
+    background: #fafaf7;
+    padding: 0.5in 0.55in 0.85in 0.55in;
+    color: #1a1a1a;
+    position: relative;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid #d4cfc4;
+    padding-bottom: 0.1in;
+    margin-bottom: 0.22in;
+  }
+  .header-mark {
+    font-family: Georgia, serif;
+    font-size: 9pt;
+    letter-spacing: 0.4em;
+    color: #38BDF8;
+    text-transform: uppercase;
+  }
+  .header-context {
+    font-size: 8pt;
+    color: #6b6b6b;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .footer {
+    position: absolute;
+    bottom: 0.3in;
+    left: 0.55in;
+    right: 0.55in;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8pt;
+    color: #888;
+    letter-spacing: 0.08em;
+    border-top: 1px solid #e8e3d6;
+    padding-top: 0.1in;
+  }
+  .footer-member { color: #0284C7; font-weight: 500; }
+
+  .section-label {
+    font-family: Georgia, serif;
+    font-size: 10pt;
+    color: #38BDF8;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    margin-bottom: 0.04in;
+  }
+  .section-title {
+    font-family: Georgia, serif;
+    font-size: 22pt;
+    font-weight: 400;
+    color: #1a1a1a;
+    margin-bottom: 0.15in;
+    line-height: 1.2;
+  }
+  .section-rule {
+    height: 1px;
+    background: #1a1a1a;
+    width: 1in;
+    margin-bottom: 0.18in;
+  }
+
+  .verdict {
+    border: 2px solid #8a2a2a;
+    background: linear-gradient(135deg, #1a0a0a 0%, #2a1010 100%);
+    color: #fafaf7;
+    padding: 0.18in 0.28in;
+    margin-bottom: 0.18in;
+    text-align: center;
+  }
+  .verdict.qualified {
+    border-color: #38BDF8;
+    background: linear-gradient(135deg, #0a1a2a 0%, #0c2540 100%);
+  }
+  .verdict.ideal {
+    border-color: #c9a96e;
+    background: linear-gradient(135deg, #1a1410 0%, #2a1f0a 100%);
+  }
+  .verdict-tag {
+    font-size: 8.5pt;
+    letter-spacing: 0.45em;
+    text-transform: uppercase;
+    color: #d4cfc4;
+    margin-bottom: 0.04in;
+  }
+  .verdict-headline {
+    font-family: Georgia, serif;
+    font-size: 22pt;
+    font-weight: 400;
+    line-height: 1.05;
+    color: #fafaf7;
+    margin-bottom: 0.05in;
+  }
+  .verdict-headline strong {
+    color: #c94a4a;
+    font-weight: 500;
+  }
+  .verdict.qualified .verdict-headline strong { color: #38BDF8; }
+  .verdict.ideal .verdict-headline strong { color: #d4af37; }
+  .verdict-sub {
+    font-size: 9.5pt;
+    color: #d4cfc4;
+    line-height: 1.4;
+    max-width: 5.5in;
+    margin: 0 auto;
+  }
+
+  .qual-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border: 1px solid #d4cfc4;
+    font-size: 9.5pt;
+    margin-bottom: 0.15in;
+  }
+  .qual-table thead th {
+    background: #0a1a2a;
+    color: #fafaf7;
+    text-align: left;
+    padding: 0.1in 0.12in;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-size: 8pt;
+    border-right: 1px solid #38BDF8;
+  }
+  .qual-table thead th:last-child { border-right: none; }
+  .qual-table thead th.bureau,
+  .qual-table thead th.status { text-align: center; }
+  .qual-table tbody tr {
+    border-bottom: 1px solid #f0e9d8;
+  }
+  .qual-table tbody tr:last-child { border-bottom: none; }
+  .qual-table tbody tr:nth-child(even) { background: #faf7ec; }
+
+  .qual-table td {
+    padding: 0.13in 0.12in;
+    vertical-align: middle;
+    border-right: 1px solid #f0e9d8;
+  }
+  .qual-table td:last-child { border-right: none; }
+
+  .crit-name {
+    font-family: Georgia, serif;
+    font-size: 11pt;
+    color: #1a1a1a;
+    line-height: 1.25;
+    margin-bottom: 0.03in;
+  }
+  .crit-hint {
+    font-size: 8.5pt;
+    color: #6b6b6b;
+    font-style: italic;
+    line-height: 1.3;
+  }
+
+  .bureau-cell {
+    text-align: center;
+    width: 1.05in;
+  }
+  .bureau-value {
+    font-family: Georgia, serif;
+    font-size: 11pt;
+    color: #1a1a1a;
+    margin-bottom: 0.02in;
+  }
+  .bureau-icon {
+    font-size: 11pt;
+    line-height: 1;
+  }
+  .bureau-icon.pass { color: #0EA5E9; }
+  .bureau-icon.fail { color: #c94a4a; }
+  .bureau-icon.warn { color: #b8800a; }
+  .bureau-icon.unknown { color: #999; }
+
+  .status-cell {
+    text-align: center;
+    width: 0.85in;
+  }
+  .status-pill {
+    display: inline-block;
+    padding: 0.05in 0.14in;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #fff;
+    border-radius: 999px;
+  }
+  .status-pill.fail { background: #c94a4a; }
+  .status-pill.pass { background: #0EA5E9; }
+  .status-pill.mixed { background: #b8800a; }
+  .status-pill.unknown { background: #888; }
+
+  .legend {
+    margin-top: 0.1in;
+    font-size: 8.5pt;
+    color: #6b6b6b;
+    line-height: 1.4;
+    text-align: center;
+    padding: 0.08in;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+  }
+  .legend strong { color: #0284C7; }
+
+  .path-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.2in;
+    margin-bottom: 0.2in;
+  }
+  .path-card {
+    border: 1.5px solid #d4cfc4;
+    background: #fff;
+    padding: 0.2in;
+  }
+  .path-card.dark {
+    background: linear-gradient(135deg, #0a1a2a 0%, #0c2540 100%);
+    color: #fafaf7;
+    border-color: #38BDF8;
+  }
+  .path-tag {
+    font-size: 8pt;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #38BDF8;
+    margin-bottom: 0.06in;
+  }
+  .path-headline {
+    font-family: Georgia, serif;
+    font-size: 16pt;
+    margin-bottom: 0.08in;
+    line-height: 1.2;
+  }
+  .path-meta {
+    font-size: 9pt;
+    color: #6b6b6b;
+    margin-bottom: 0.1in;
+  }
+  .path-card.dark .path-meta { color: #d4cfc4; }
+  .path-list {
+    font-size: 10pt;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .path-list li {
+    padding-left: 0.18in;
+    position: relative;
+    margin-bottom: 0.05in;
+  }
+  .path-list li:before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: #38BDF8;
+  }
+
+  .bridge-callout {
+    background: #0a1a2a;
+    color: #fafaf7;
+    padding: 0.22in 0.28in;
+    border-left: 4px solid #38BDF8;
+  }
+  .bridge-label {
+    font-size: 8.5pt;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #38BDF8;
+    margin-bottom: 0.06in;
+  }
+  .bridge-headline {
+    font-family: Georgia, serif;
+    font-size: 14pt;
+    margin-bottom: 0.06in;
+  }
+  .bridge-body {
+    font-size: 10pt;
+    color: #d4cfc4;
+    line-height: 1.55;
+  }
+
+  .account-card {
+    border: 1px solid #d4cfc4;
+    background: #fff;
+    margin-bottom: 0.18in;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  .account-header {
+    background: #1a1a1a;
+    color: #fafaf7;
+    padding: 0.13in 0.18in;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .account-header.positive { background: #075985; }
+  .account-name { font-family: Georgia, serif; font-size: 12pt; }
+  .account-tag {
+    background: #8a2a2a;
+    color: #fafaf7;
+    font-size: 7.5pt;
+    letter-spacing: 0.15em;
+    padding: 0.04in 0.12in;
+    text-transform: uppercase;
+  }
+  .account-tag.positive { background: #0EA5E9; }
+  .account-body { padding: 0.13in 0.18in; }
+  .bureau-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .bureau-table th, .bureau-table td {
+    text-align: left;
+    padding: 0.05in 0.1in;
+  }
+  .bureau-table th {
+    background: #f0f9ff;
+    color: #0284C7;
+    font-weight: 500;
+    font-size: 8pt;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .bureau-table td { border-bottom: 1px solid #f3eee0; }
+  .bureau-table .field-label { color: #6b6b6b; font-size: 8.5pt; }
+
+  .summary-box {
+    background: #fff;
+    border: 1px solid #d4cfc4;
+    padding: 0.18in 0.22in;
+    margin-bottom: 0.18in;
+  }
+  .summary-box h4 {
+    font-family: Georgia, serif;
+    font-size: 13pt;
+    margin-bottom: 0.08in;
+    color: #0a1a2a;
+  }
+  .summary-box .num {
+    font-family: Georgia, serif;
+    font-size: 22pt;
+    color: #c94a4a;
+    margin-right: 0.1in;
+    line-height: 1;
+  }
+  .summary-box .num.good { color: #0EA5E9; }
+
+  .neg-list {
+    list-style: none;
+    font-size: 9.5pt;
+    line-height: 1.6;
+  }
+  .neg-list li {
+    padding: 0.06in 0;
+    border-bottom: 1px dotted #e8e3d6;
+    display: flex;
+    justify-content: space-between;
+  }
+  .neg-list li:last-child { border-bottom: none; }
+  .neg-list .neg-creditor { color: #1a1a1a; font-weight: 500; }
+  .neg-list .neg-cat { color: #c94a4a; font-size: 8.5pt; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .overflow-note {
+    margin-top: 0.1in;
+    padding: 0.1in 0.14in;
+    background: #f0f9ff;
+    border-left: 3px solid #38BDF8;
+    font-size: 9pt;
+    color: #0284C7;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<div class="page cover">
+  <div>
+    <div class="cover-logo-wrap">
+      <img src="{{logoPath}}" class="cover-logo-img" alt="Arvantis Tech" />
+    </div>
+    <div class="cover-rule"></div>
+  </div>
+  <div class="cover-center">
+    <div class="cover-subtitle">Bank Intelligence Report</div>
+    <div class="cover-title">Funding Qualification<br><em>&amp; Credit Profile</em></div>
+    <div class="cover-client">{{client.name}}</div>
+    <div class="cover-meta">PREPARED {{client.prepDate}} · REPORT DATE {{client.reportDate}}</div>
+  </div>
+  <div class="cover-footer">
+    <div>Confidential</div>
+    <div class="member">Prepared by {{client.preparer}}</div>
+  </div>
+</div>
+
+<div class="page interior">
+  <div class="header">
+    <div class="header-mark"><img src="{{logoPath}}" class="header-logo-img" alt="Arvantis Tech" />Arvantis Tech · Bank</div>
+    <div class="header-context">{{client.name}} · Qualification</div>
+  </div>
+
+  <div class="section-label">Section 01</div>
+  <div class="section-title">Funding Qualification</div>
+  <div class="section-rule"></div>
+
+  <div class="verdict {{verdictClass}}">
+    <div class="verdict-tag">Verdict</div>
+    <div class="verdict-headline">{{{verdictHeadlineHtml}}}</div>
+    <div class="verdict-sub">{{verdictSubtext}}</div>
+  </div>
+
+  <table class="qual-table">
+    <thead>
+      <tr>
+        <th style="width: 2.7in;">What Lenders Need</th>
+        <th class="bureau">Equifax</th>
+        <th class="bureau">Experian</th>
+        <th class="bureau">TransUnion</th>
+        <th class="status">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each criteria}}
+      <tr>
+        <td>
+          <div class="crit-name">{{label}}</div>
+          {{#if hint}}<div class="crit-hint">{{hint}}</div>{{/if}}
+        </td>
+        <td class="bureau-cell">
+          <div class="bureau-value">{{bureaus.equifax.value}}</div>
+          <div class="bureau-icon {{bureaus.equifax.status}}">{{statusIcon bureaus.equifax.status}}</div>
+        </td>
+        <td class="bureau-cell">
+          <div class="bureau-value">{{bureaus.experian.value}}</div>
+          <div class="bureau-icon {{bureaus.experian.status}}">{{statusIcon bureaus.experian.status}}</div>
+        </td>
+        <td class="bureau-cell">
+          <div class="bureau-value">{{bureaus.transunion.value}}</div>
+          <div class="bureau-icon {{bureaus.transunion.status}}">{{statusIcon bureaus.transunion.status}}</div>
+        </td>
+        <td class="status-cell"><span class="status-pill {{status}}">{{statusLabel status}}</span></td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <div class="legend">
+    <strong>How to read:</strong> Each row is one thing lenders check. Each bureau gets graded on every row.
+    <strong>Any FAIL</strong> means refer to credit repair. <strong>Zero FAILs</strong> means qualified for $30K-$75K. <strong>All PASS</strong> means ideal for $75K+ max funding.
+  </div>
+
+  <div class="footer">
+    <div>Page 2 of {{pageTotal}} · Bank Intelligence Report</div>
+    <div class="footer-member">Prepared by {{client.preparer}}{{#if client.phone}} · {{client.phone}}{{/if}}{{#if client.email}} · {{client.email}}{{/if}}</div>
+  </div>
+</div>
+
+<div class="page interior">
+  <div class="header">
+    <div class="header-mark"><img src="{{logoPath}}" class="header-logo-img" alt="Arvantis Tech" />Arvantis Tech · Bank</div>
+    <div class="header-context">{{client.name}} · Path to Qualification</div>
+  </div>
+
+  <div class="section-label">Section 02</div>
+  <div class="section-title">The Path</div>
+  <div class="section-rule"></div>
+
+  <div class="path-cards">
+    <div class="path-card dark">
+      <div class="path-tag">Today</div>
+      <div class="path-headline">{{path.today.headline}}</div>
+      <div class="path-meta">{{path.today.meta}}</div>
+      <ul class="path-list">
+        {{#each path.today.bullets}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+    <div class="path-card">
+      <div class="path-tag">{{path.next.tag}}</div>
+      <div class="path-headline">{{path.next.headline}}</div>
+      <div class="path-meta">{{path.next.meta}}</div>
+      <ul class="path-list">
+        {{#each path.next.bullets}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="path-cards" style="margin-bottom:0.22in;">
+    <div class="path-card" style="grid-column: 1 / -1;">
+      <div class="path-tag">{{path.stretch.tag}}</div>
+      <div class="path-headline">{{path.stretch.headline}}</div>
+      <div class="path-meta">{{path.stretch.meta}}</div>
+      <ul class="path-list">
+        {{#each path.stretch.bullets}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+  </div>
+
+  <div class="bridge-callout">
+    <div class="bridge-label">Recommended Action</div>
+    <div class="bridge-headline">{{path.recommendation.headline}}</div>
+    <div class="bridge-body">{{path.recommendation.body}}</div>
+  </div>
+
+  <div class="footer">
+    <div>Page 3 of {{pageTotal}} · Bank Intelligence Report</div>
+    <div class="footer-member">Prepared by {{client.preparer}}{{#if client.phone}} · {{client.phone}}{{/if}}{{#if client.email}} · {{client.email}}{{/if}}</div>
+  </div>
+</div>
+
+{{#if hasNegatives}}
+<div class="page interior">
+  <div class="header">
+    <div class="header-mark"><img src="{{logoPath}}" class="header-logo-img" alt="Arvantis Tech" />Arvantis Tech · Bank</div>
+    <div class="header-context">{{client.name}} · Negative Items</div>
+  </div>
+
+  <div class="section-label">Section 03</div>
+  <div class="section-title">What's Hurting the File</div>
+  <div class="section-rule"></div>
+
+  <div class="summary-box">
+    <h4><span class="num">{{negativeCount}}</span> negative items across the bureaus</h4>
+    <ul class="neg-list">
+      {{#each negativesList}}
+      <li>
+        <span class="neg-creditor">{{creditor}}</span>
+        <span class="neg-cat">{{categoryLabel}}</span>
+      </li>
+      {{/each}}
+    </ul>
+  </div>
+
+  {{#each negativesDetailed}}
+  <div class="account-card">
+    <div class="account-header">
+      <div class="account-name">{{creditor}}</div>
+      <div class="account-tag">{{categoryLabel}}</div>
+    </div>
+    <div class="account-body">
+      <table class="bureau-table">
+        <thead>
+          <tr><th></th><th>Equifax</th><th>Experian</th><th>TransUnion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="field-label">Reported</td><td>{{cells.reported.equifax}}</td><td>{{cells.reported.experian}}</td><td>{{cells.reported.transunion}}</td></tr>
+          <tr><td class="field-label">Status</td><td>{{cells.status.equifax}}</td><td>{{cells.status.experian}}</td><td>{{cells.status.transunion}}</td></tr>
+          <tr><td class="field-label">Balance</td><td>{{cells.balance.equifax}}</td><td>{{cells.balance.experian}}</td><td>{{cells.balance.transunion}}</td></tr>
+          <tr><td class="field-label">Past Due</td><td>{{cells.pastDue.equifax}}</td><td>{{cells.pastDue.experian}}</td><td>{{cells.pastDue.transunion}}</td></tr>
+          <tr><td class="field-label">Date Opened</td><td>{{cells.dateOpened.equifax}}</td><td>{{cells.dateOpened.experian}}</td><td>{{cells.dateOpened.transunion}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{/each}}
+
+  <div class="footer">
+    <div>Page 4 of {{pageTotal}} · Bank Intelligence Report</div>
+    <div class="footer-member">Prepared by {{client.preparer}}{{#if client.phone}} · {{client.phone}}{{/if}}{{#if client.email}} · {{client.email}}{{/if}}</div>
+  </div>
+</div>
+{{/if}}
+
+{{#each positives.pages}}
+<div class="page interior">
+  <div class="header">
+    <div class="header-mark"><img src="{{../logoPath}}" class="header-logo-img" alt="Arvantis Tech" />Arvantis Tech · Bank</div>
+    <div class="header-context">{{../client.name}} · Strengths{{#unless isFirst}} (cont.){{/unless}}</div>
+  </div>
+
+  {{#if isFirst}}
+  <div class="section-label">Section {{../strengthsSectionNum}}</div>
+  <div class="section-title">What's Working</div>
+  <div class="section-rule"></div>
+  {{/if}}
+
+  {{#if ../positives.isEmpty}}
+  <div class="summary-box">
+    <h4>No open accounts in good standing.</h4>
+    <p style="font-size:10pt;color:#6b6b6b;line-height:1.5;">
+      The file does not currently show open accounts in good standing. After credit repair clears the
+      negative items, a structured rebuild plan (secured cards, credit-builder loan, authorized-user
+      tradelines on seasoned accounts) establishes positive history quickly.
+    </p>
+  </div>
+  {{else}}
+    {{#each cards}}
+    <div class="account-card">
+      <div class="account-header positive">
+        <div class="account-name">{{creditor}}</div>
+        <div class="account-tag positive">{{typeLabel}}</div>
+      </div>
+      <div class="account-body">
+        <table class="bureau-table">
+          <thead>
+            <tr><th></th><th>Equifax</th><th>Experian</th><th>TransUnion</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="field-label">Reported</td><td>{{cells.reported.equifax}}</td><td>{{cells.reported.experian}}</td><td>{{cells.reported.transunion}}</td></tr>
+            <tr><td class="field-label">Status</td><td>{{cells.status.equifax}}</td><td>{{cells.status.experian}}</td><td>{{cells.status.transunion}}</td></tr>
+            <tr><td class="field-label">Limit</td><td>{{cells.limit.equifax}}</td><td>{{cells.limit.experian}}</td><td>{{cells.limit.transunion}}</td></tr>
+            <tr><td class="field-label">Balance</td><td>{{cells.balance.equifax}}</td><td>{{cells.balance.experian}}</td><td>{{cells.balance.transunion}}</td></tr>
+            <tr><td class="field-label">Utilization</td><td>{{cells.util.equifax}}</td><td>{{cells.util.experian}}</td><td>{{cells.util.transunion}}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{/each}}
+    {{#if isLast}}{{#if ../../positives.overflowLabel}}
+    <div class="overflow-note">{{../../positives.overflowLabel}}</div>
+    {{/if}}{{/if}}
+  {{/if}}
+
+  <div class="footer">
+    <div>Page {{pageNum}} of {{../pageTotal}} · Bank Intelligence Report</div>
+    <div class="footer-member">Prepared by {{../client.preparer}}{{#if ../client.phone}} · {{../client.phone}}{{/if}}{{#if ../client.email}} · {{../client.email}}{{/if}}</div>
+  </div>
+</div>
+{{/each}}
+
+</body>
+</html>

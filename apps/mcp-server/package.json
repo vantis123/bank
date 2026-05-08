@@ -1,12 +1,29 @@
 {
   "name": "@bank/mcp-server",
   "version": "0.0.1",
-  "description": "Bank MCP server — exposes pull_fsn / pull_iiq / analyze_report tools to Claude / Codex / Cursor",
+  "description": "Bank MCP server — exposes capture / parse / score / render / run_full tools",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
+  "bin": {
+    "bank-mcp": "./src/index.ts"
+  },
   "scripts": {
-    "dev": "echo 'Phase 6 — MCP server not built yet. See docs/BUILD-PLAN.md'",
-    "build": "echo 'Phase 6'"
+    "start": "tsx src/index.ts",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bank/funding-rules": "*",
+    "@bank/parsers": "*",
+    "@bank/pdf-renderer": "*",
+    "@bank/playwright-flows": "*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }

@@ -1,6 +1,102 @@
-// @bank/playwright-flows — Phase 2
-// Port from arvantis-tech/scripts/extraction/{freescorenow-checker.js, identityiq-checker.js}
-// Plus identityiq-api-pull-v2.js's scroll-trigger pattern for /CreditReport.aspx
-// See docs/BUILD-PLAN.md
+/**
+ * @bank/playwright-flows
+ *
+ *   captureFSN({ username, password })  →  Promise<CaptureResult>
+ *   captureIIQ({ username, password, last4 })  →  Promise<CaptureResult>
+ *
+ * Headed by default — Skool users see the bot work, builds trust.
+ * Returns text suitable for piping into @bank/parsers.
+ */
 
-export const PHASE = 2 as const;
+import { chromium } from "playwright";
+import { fsnLogin, fsnCaptureReport } from "./fsn.ts";
+import { iiqLogin, iiqCaptureReport } from "./iiq.ts";
+import { defaultLogger, ensureSandbox } from "./util.ts";
+import type {
+  CaptureOptions,
+  CaptureResult,
+  FlowContext,
+} from "./types.ts";
+
+export type {
+  CaptureCredentials,
+  CaptureOptions,
+  CaptureResult,
+  CaptureSource,
+  Platform,
+} from "./types.ts";
+
+export async function captureFSN(opts: CaptureOptions): Promise<CaptureResult> {
+  return runFlow("fsn", opts, async (ctx) => {
+    await fsnLogin(ctx, opts.username, opts.password);
+    return fsnCaptureReport(ctx);
+  });
+}
+
+export async function captureIIQ(opts: CaptureOptions): Promise<CaptureResult> {
+  return runFlow("iiq", opts, async (ctx) => {
+    await iiqLogin(ctx, opts.username, opts.password, opts.last4);
+    return iiqCaptureReport(ctx);
+  });
+}
+
+// ── plumbing ─────────────────────────────────────────────────────
+
+async function runFlow(
+  platform: "fsn" | "iiq",
+  opts: CaptureOptions,
+  fn: (ctx: FlowContext) => Promise<{ text: string; source: CaptureResult["source"]; pdfPath?: string }>
+): Promise<CaptureResult> {
+  const log = opts.onLog ?? defaultLogger;
+  const sandboxDir = await ensureSandbox(opts.sandboxDir);
+  const headed = opts.headed ?? true;
+
+  log(`Bank capture — ${platform.toUpperCase()} — ${opts.username}`);
+  log(`Headed: ${headed} · sandbox: ${sandboxDir}`);
+
+  const browser = await chromium.launch({ headless: !headed });
+  const context = await browser.newContext({
+    viewport: { width: 1366, height: 900 },
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+  });
+  const page = await context.newPage();
+
+  const ctx: FlowContext = {
+    page,
+    context,
+    sandboxDir,
+    log,
+    warnings: [],
+    screenshots: [],
+  };
+
+  try {
+    const out = await fn(ctx);
+    log(`Capture complete — ${out.text.length} chars`);
+    return {
+      ok: out.text.length > 0,
+      platform,
+      source: out.source,
+      text: out.text,
+      pdfPath: out.pdfPath,
+      screenshots: ctx.screenshots,
+      warnings: ctx.warnings,
+      reportUrl: page.url(),
+    };
+  } catch (err) {
+    const msg = (err as Error).message;
+    log(`Capture failed: ${msg}`);
+    return {
+      ok: false,
+      platform,
+      source: platform === "iiq" ? "iiq-credit-report" : "fsn-new",
+      text: "",
+      screenshots: ctx.screenshots,
+      warnings: ctx.warnings,
+      error: msg,
+    };
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}

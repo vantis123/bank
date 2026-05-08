@@ -9,14 +9,20 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo 'Phase 0 scaffold — run a workspace directly: npm run dev -w @bank/dashboard'",
-    "build": "echo 'Build not implemented yet (Phase 7)'",
-    "test": "echo 'Tests not implemented yet'",
-    "phase": "cat docs/BUILD-PLAN.md | head -40"
+    "start": "npm run start --workspace=@bank/dashboard",
+    "dashboard": "npm run start --workspace=@bank/dashboard",
+    "mcp": "npm run start --workspace=@bank/mcp-server",
+    "postinstall": "playwright install chromium",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "engines": {
     "node": ">=20"
   },
   "author": "Arvantis Tech",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "handlebars": "^4.7.9",
+    "playwright": "^1.59.1"
+  }
 }
