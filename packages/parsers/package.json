@@ -1,11 +1,23 @@
 {
   "name": "@bank/parsers",
   "version": "0.0.1",
-  "description": "FSN + IIQ credit report PDF text parsers",
+  "description": "FSN + IIQ credit report text parsers",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./iiq": "./src/iiq.ts",
+    "./fsn": "./src/fsn.ts"
+  },
   "scripts": {
-    "test": "echo 'Phase 1 — tests not written yet'"
+    "test": "tsx test/run-tests.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
   }
 }
