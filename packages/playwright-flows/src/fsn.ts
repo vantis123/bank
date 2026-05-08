@@ -17,13 +17,18 @@ import type { CaptureSource, FlowContext } from "./types.ts";
 
 async function extractPdfText(path: string): Promise<string> {
   try {
-    // pdf-parse's index.js runs a self-test on import; use the inner module.
-    // @ts-expect-error — no types for the inner path
-    const mod = await import("pdf-parse/lib/pdf-parse.js");
-    const pdfParse = (mod as any).default ?? (mod as any);
+    const { PDFParse } = await import("pdf-parse");
     const buf = await readFile(path);
-    const out = await pdfParse(buf);
-    return (out && out.text) || "";
+    const parser = new PDFParse({ data: new Uint8Array(buf) });
+    const result = await parser.getText();
+    await parser.destroy();
+    if (Array.isArray(result.pages)) {
+      return result.pages
+        .map((p: { text?: string }) => p.text ?? "")
+        .filter(Boolean)
+        .join("\n\n");
+    }
+    return (result as { text?: string }).text ?? "";
   } catch {
     return "";
   }

@@ -1,16 +1,45 @@
 /**
- * FSN / MFSN downloaded PDF format parser.
+ * FSN / MFSN downloaded "Three Bureau Credit Report" PDF parser.
  *
  * When a member clicks "Print Selected Document" on MFSN, the page generates
- * a downloadable PDF in a structured format with:
- *   - "Three Bureau Credit Report" header
- *   - Numbered table of contents (1. Report Summary, 2. Revolving Accounts, ...)
- *   - Per-bureau Account Summary tables
- *   - Per-account sections with bureau-concatenated values
- *   - "EquifaxExperianTransUnion" bureau header (note: EQ/EX/TU order, NOT IIQ's TU/EX/EQ)
+ * a downloadable PDF that pdf-parse extracts as text in this layout:
  *
- * This is the most common path — 3 of 4 test clients hit this format.
- * Format detection: presence of "Three Bureau Credit Report" + "EquifaxExperianTransUnion".
+ *   Three Bureau Credit Report
+ *   <Client Name> | <Date>
+ *   <Table of contents — sections numbered>
+ *
+ *   1. Report Summary
+ *   ...
+ *   Equifax Experian TransUnion
+ *   Report Date <date> <date> <date>
+ *   Average Account Age <age> <age> <age>
+ *   ...
+ *   Equifax<rank>
+ *   <score>
+ *   <rating>
+ *   Experian<rank>
+ *   <score>
+ *   <rating>
+ *   ...
+ *   Other Credit Items table:
+ *     Equifax Experian TransUnion
+ *     Collections N N N
+ *     Inquiries N N N
+ *     ...
+ *
+ *   2. Revolving Accounts
+ *   2.1 <Creditor> (<STATUS>)
+ *   ... per-bureau columns Reported / Account Number / Account Status / Credit Limit / Balance ...
+ *   ... Days Past Due / Collection / Charge Off rows ...
+ *   ... Account Type / Status / Activity Designator / Date Opened ...
+ *
+ *   3. Mortgage Accounts
+ *   4. Installment Accounts
+ *   5. Other Accounts
+ *   11. Collections
+ *
+ * STATUS in the heading is one of: OPEN, CLOSED, COLLECTION, BANKRUPTCY,
+ * CHARGE-OFF — that alone is a fast negative-detection signal.
  */
 
 import {
@@ -20,24 +49,25 @@ import {
   type BureauAccountDetail,
   type BureauSummary,
   type CreditReport,
-  type Inquiry,
-  type PublicRecord,
 } from "./types.ts";
-import {
-  categorizeBureau,
-  isNegativeCategory,
-  parseDollar,
-  rollupCategory,
-  splitEqualOrNull,
-} from "./shared.ts";
+import { parseDollar } from "./shared.ts";
 
-/** Bureau column order in the downloaded PDF format: Equifax / Experian / TransUnion */
-const BUREAU_ORDER: readonly Bureau[] = ["equifax", "experian", "transunion"] as const;
+const BUREAUS: readonly Bureau[] = ["equifax", "experian", "transunion"] as const;
 
-const BUREAU_HEADER = "EquifaxExperianTransUnion";
+const NEGATIVE_STATUS_TOKENS = [
+  "COLLECTION",
+  "CHARGE-OFF",
+  "CHARGEOFF",
+  "CHARGE OFF",
+  "BANKRUPTCY",
+  "FORECLOSURE",
+  "REPOSSESSION",
+  "PAST DUE",
+  "DELINQUENT",
+];
 
 export function isFSNPdfFormat(text: string): boolean {
-  return /Three Bureau Credit Report/i.test(text) && /EquifaxExperianTransUnion/i.test(text);
+  return /Three Bureau Credit Report/i.test(text);
 }
 
 export function parseFSNPDF(text: string): CreditReport {
@@ -56,478 +86,467 @@ export function parseFSNPDF(text: string): CreditReport {
   };
 
   if (!isFSNPdfFormat(text)) {
-    report.errors.push("Not a downloaded MFSN PDF format");
+    report.errors.push("Not a Three Bureau Credit Report PDF");
     return report;
   }
 
-  const lines = text.split("\n").map((l) => l.trim());
+  const lines = text.split(/\r?\n/);
 
-  // ── Report date (e.g., "Brandon W Bailer | February 27, 2026") ──
-  for (const line of lines.slice(0, 30)) {
-    const m = line.match(/\|\s*(.+\d{4})$/);
-    if (m) {
-      report.reportDate = m[1]?.trim() ?? null;
-      break;
-    }
-  }
-
-  // ── Scores ──
-  // Pattern: bureau name on one line, ranking number, score, rating
-  // "Equifax\n1\n663\nGood\nExperian\n2\n651\nFair\nTransUnion\n3\n615\nFair"
-  parseScoresFromBureauBlocks(lines, report);
-
-  // ── Per-bureau summary ──
-  parseBureauSummaries(lines, report);
-
-  // ── Accounts ──
-  parseAccountSections(lines, report);
-
-  // ── Inquiries + Public Records ──
-  parseInquiries(lines, report);
-  parsePublicRecords(lines, report);
-
-  return report;
-}
-
-function parseScoresFromBureauBlocks(lines: string[], report: CreditReport): void {
-  // Find the score block — typically appears once near the top, where each bureau is followed by:
-  //   <ranking> <score> <rating>
-  // E.g., "Equifax", "1", "663", "Good"
-  for (let i = 0; i < Math.min(lines.length - 4, 200); i++) {
-    if (lines[i] !== "Equifax") continue;
-    if (!/^[1-3]$/.test(lines[i + 1] ?? "")) continue;
-    if (!/^\d{3}$/.test(lines[i + 2] ?? "")) continue;
-    if (!/^(Excellent|Good|Fair|Poor|Very Poor)$/i.test(lines[i + 3] ?? "")) continue;
-    // Found the score block — read all 3 bureaus
-    const eqScore = parseInt(lines[i + 2]!, 10);
-    if (eqScore >= 300 && eqScore <= 850) report.scores.equifax = eqScore;
-
-    // Now find Experian
-    for (let j = i + 4; j < Math.min(i + 30, lines.length - 3); j++) {
-      if (lines[j] === "Experian" && /^[1-3]$/.test(lines[j + 1] ?? "") && /^\d{3}$/.test(lines[j + 2] ?? "")) {
-        const exScore = parseInt(lines[j + 2]!, 10);
-        if (exScore >= 300 && exScore <= 850) report.scores.experian = exScore;
-        break;
-      }
-    }
-    for (let j = i + 4; j < Math.min(i + 30, lines.length - 3); j++) {
-      if (lines[j] === "TransUnion" && /^[1-3]$/.test(lines[j + 1] ?? "") && /^\d{3}$/.test(lines[j + 2] ?? "")) {
-        const tuScore = parseInt(lines[j + 2]!, 10);
-        if (tuScore >= 300 && tuScore <= 850) report.scores.transunion = tuScore;
-        break;
-      }
-    }
-    break;
-  }
+  report.reportDate = extractReportDate(lines);
+  extractScores(lines, report);
+  extractOtherCreditItems(lines, report);
+  extractAccountTypeSummary(lines, report);
+  extractAccounts(lines, report);
+  extractCollectionsSection(lines, report);
 
   if (!report.scores.equifax) report.warnings.push("Missing equifax score");
   if (!report.scores.experian) report.warnings.push("Missing experian score");
   if (!report.scores.transunion) report.warnings.push("Missing transunion score");
+
+  return report;
 }
 
-/**
- * Parse the per-bureau summary tables.
- * Pattern: after "EquifaxExperianTransUnion" header, fields appear with values
- * concatenated for the 3 bureaus (e.g., "Average Account Age9 Years8 Years7 Years").
- */
-function parseBureauSummaries(lines: string[], report: CreditReport): void {
-  // Find the first "Equifax Accounts Summary" or similar
-  const summaryIdx = lines.findIndex((l) => /Accounts Summary/i.test(l));
-  if (summaryIdx === -1) return;
+// ── Report date ──────────────────────────────────────────────────
 
-  // Look for "EquifaxExperianTransUnion" header within reasonable distance
-  let headerIdx = -1;
-  for (let i = summaryIdx; i < Math.min(summaryIdx + 80, lines.length); i++) {
-    if (lines[i] === BUREAU_HEADER) {
-      headerIdx = i;
-      break;
-    }
+function extractReportDate(lines: string[]): string | null {
+  for (const raw of lines.slice(0, 30)) {
+    const line = raw.trim();
+    // "Jeffrey Mendez | May 08, 2026"
+    const m = line.match(/\|\s*([A-Z][a-z]+\s+\d{1,2},\s*\d{4})\s*$/);
+    if (m && m[1]) return m[1].trim();
   }
-  if (headerIdx === -1) return;
-
-  // Walk forward, looking for known summary fields
-  const SUMMARY_FIELDS: Array<{ label: string; key: keyof BureauSummary; isDollar?: boolean }> = [
-    { label: "Open Accounts", key: "openAccounts" },
-    { label: "Closed Accounts", key: "closedAccounts" },
-    { label: "Total Accounts", key: "totalAccounts" },
-    { label: "Total Balance", key: "totalBalance", isDollar: true },
-    { label: "Public Records", key: "publicRecords" },
-    { label: "Inquiries", key: "inquiries" },
-    { label: "Inquiries (2 Years)", key: "inquiries" },
-    { label: "Total Credit Limit", key: "totalCreditLimit", isDollar: true },
-    { label: "Total Available Credit", key: "totalAvailableCredit", isDollar: true },
-  ];
-
-  for (let i = headerIdx + 1; i < Math.min(headerIdx + 60, lines.length); i++) {
-    const line = lines[i] ?? "";
-    if (line === BUREAU_HEADER) continue; // header may repeat
-    if (/Accounts Summary|Score and Rating|Factors affecting/i.test(line)) break;
-
-    for (const field of SUMMARY_FIELDS) {
-      // Some lines: "Open Accounts134"
-      // Others: "Open Accounts" then on next line "1\n3\n4"
-      if (line === field.label || line.startsWith(field.label)) {
-        // Inline value pattern: "Total Accounts3845"
-        const inlineRest = line.slice(field.label.length).trim();
-        if (inlineRest) {
-          assignFromConcat(field, inlineRest, report);
-          break;
-        }
-        // Or value is on next non-empty line
-        const v = nextNonEmptyValue(lines, i + 1, 6);
-        if (v) {
-          assignFromConcat(field, v, report);
-          break;
-        }
-      }
-    }
-  }
-}
-
-function nextNonEmptyValue(lines: string[], startIdx: number, maxAhead: number): string | null {
-  for (let i = startIdx; i < Math.min(startIdx + maxAhead, lines.length); i++) {
-    const trimmed = (lines[i] ?? "").trim();
-    if (trimmed) return trimmed;
+  // Fallback — look for "Report Date <Mon DD, YYYY>"
+  for (const raw of lines.slice(0, 200)) {
+    const line = raw.trim();
+    const m = line.match(/Report Date\s+([A-Z][a-z]+\s+\d{1,2},\s*\d{4})/);
+    if (m && m[1]) return m[1].trim();
   }
   return null;
 }
 
-function assignFromConcat(
-  field: { key: keyof BureauSummary; isDollar?: boolean },
-  value: string,
-  report: CreditReport
-): void {
-  if (field.isDollar) {
-    // "$X$Y$Z" → 3 dollar values
-    const parts = value.split("$").filter(Boolean);
-    if (parts.length === 3) {
-      const [eq, ex, tu] = parts.map(parseDollar);
-      if (eq !== null) (report.summary.equifax as any)[field.key] = eq;
-      if (ex !== null) (report.summary.experian as any)[field.key] = ex;
-      if (tu !== null) (report.summary.transunion as any)[field.key] = tu;
+// ── Scores ───────────────────────────────────────────────────────
+//
+// pdf-parse 2.x squashes "Equifax1\n582\nFair" together. The score is always
+// 300-850 and the rating is one of Excellent/Good/Fair/Poor/Very Poor/Bad.
+
+function extractScores(lines: string[], report: CreditReport): void {
+  const ratingRe = /^(Excellent|Very Good|Good|Fair|Average|Poor|Very Poor|Bad)\s*$/i;
+  for (let i = 0; i < lines.length - 4; i++) {
+    const a = (lines[i] ?? "").trim();
+    const b = (lines[i + 1] ?? "").trim();
+    const c = (lines[i + 2] ?? "").trim();
+
+    // pattern A: bureau+rank concatenated ("Equifax1"), score, rating
+    let m = a.match(/^(Equifax|Experian|TransUnion)\s*[1-3]?$/i);
+    if (m && /^\d{3}$/.test(b) && ratingRe.test(c)) {
+      assignScore(report, m[1]!, parseInt(b, 10));
+      continue;
     }
-    return;
-  }
-  // Non-dollar: try to split equally if length divisible by 3
-  const cleaned = value.replace(/[^\d]/g, "");
-  if (cleaned.length > 0 && cleaned.length <= 9) {
-    // Try equal split
-    const split = splitEqualOrNull(cleaned);
-    if (split) {
-      const [eq, ex, tu] = split.map((s) => parseInt(s, 10));
-      if (Number.isFinite(eq)) (report.summary.equifax as any)[field.key] = eq;
-      if (Number.isFinite(ex)) (report.summary.experian as any)[field.key] = ex;
-      if (Number.isFinite(tu)) (report.summary.transunion as any)[field.key] = tu;
-    } else {
-      report.warnings.push(`Summary ${String(field.key)}: ambiguous "${cleaned}"`);
+    // pattern B: bureau alone, rank line, score, rating (older layout)
+    m = a.match(/^(Equifax|Experian|TransUnion)\s*$/i);
+    if (m && /^[1-3]$/.test(b) && /^\d{3}$/.test(c)) {
+      const score = parseInt(c, 10);
+      assignScore(report, m[1]!, score);
+      continue;
     }
   }
 }
 
-/**
- * Account sections look like:
- *   "4.1 Florida Institute Of (CLOSED)" — account header (numbered, optional CLOSED)
- *   ... description text ...
- *   "EquifaxExperianTransUnion" — bureau header
- *   "ReportedYesNoYes" — per-bureau reporting flag
- *   "Account Numberxxx 4AU7N/Axxx 4AU7" — 3 account numbers
- *   "Account StatusClosedN/AClosed" — 3 statuses
- *   "Credit Limit$0N/A$0" — 3 limits
- *   "Reported Balance$0N/A$0" — 3 balances
- *   ...
- */
-function parseAccountSections(lines: string[], report: CreditReport): void {
-  const sectionStarts: Array<{ idx: number; title: string; isClosed: boolean }> = [];
-  // Match patterns like "4.1 Florida Institute Of (CLOSED)", "2.1 Capital One Bank Usa6"
-  // The trailing digit is page reference, ignore. The (CLOSED) marker is optional.
-  const sectionHeaderRe = /^([1-9]\d?)\.(\d+)\s+(.+?)(?:\s*\(([A-Z]+)\))?(?:\d+)?$/;
+function assignScore(report: CreditReport, bureau: string, score: number): void {
+  if (score < 300 || score > 850) return;
+  const key = bureau.toLowerCase() as Bureau;
+  if (key === "equifax" || key === "experian" || key === "transunion") {
+    report.scores[key] = score;
+  }
+}
 
+// ── "Other Credit Items" summary table ───────────────────────────
+//
+// Layout in the print PDF:
+//   Equifax Experian TransUnion
+//   Consumer Statements N N N
+//   Personal Information N N N
+//   Inquiries N N N
+//   Public Records N N N
+//   Collections N N N
+
+function extractOtherCreditItems(lines: string[], report: CreditReport): void {
+  for (let i = 0; i < lines.length - 5; i++) {
+    if (!/^Equifax\s+Experian\s+TransUnion\s*$/i.test(lines[i] ?? "")) continue;
+    // Read up to 8 following rows looking for label+3-numbers
+    for (let j = i + 1; j < Math.min(i + 12, lines.length); j++) {
+      const row = (lines[j] ?? "").trim();
+      const m = row.match(/^([A-Za-z][A-Za-z ]+?)\s+(\d+|N\/A)\s+(\d+|N\/A)\s+(\d+|N\/A)\s*$/);
+      if (!m) continue;
+      const label = (m[1] ?? "").toLowerCase().trim();
+      const eq = parseCount(m[2]);
+      const ex = parseCount(m[3]);
+      const tu = parseCount(m[4]);
+      if (label === "collections" || label === "collection") {
+        if (eq !== null) report.summary.equifax.collection = eq;
+        if (ex !== null) report.summary.experian.collection = ex;
+        if (tu !== null) report.summary.transunion.collection = tu;
+      } else if (label === "inquiries") {
+        if (eq !== null) report.summary.equifax.inquiries = eq;
+        if (ex !== null) report.summary.experian.inquiries = ex;
+        if (tu !== null) report.summary.transunion.inquiries = tu;
+      } else if (label === "public records") {
+        if (eq !== null) report.summary.equifax.publicRecords = eq;
+        if (ex !== null) report.summary.experian.publicRecords = ex;
+        if (tu !== null) report.summary.transunion.publicRecords = tu;
+      }
+    }
+  }
+}
+
+function parseCount(s: string | undefined): number | null {
+  if (!s) return null;
+  if (/^N\/A$/i.test(s)) return null;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+// ── Account-type summary tables (per bureau totals) ──────────────
+//
+// Layout:
+//   Account Type Open With Balance Total Balance Available Credit Limit Debt-To-Credit Payment
+//   Revolving 0 0 $0 $0 $0 0% $0
+//   Mortgage 1 1 $46,285 $36,215 $82,500 56% $1,042
+//   Installment N/A N/A N/A N/A N/A N/A N/A
+//   Other N/A N/A N/A N/A N/A N/A N/A
+//   Total 1 1 $46,285 $36,215 $82,500 0% $1,042
+//
+// One table per bureau. We harvest open/total per type.
+
+function extractAccountTypeSummary(lines: string[], report: CreditReport): void {
+  let bureauIdx = 0;
+  for (let i = 0; i < lines.length - 6; i++) {
+    if (!/Account Type\s+Open\s+With Balance/i.test(lines[i] ?? "")) continue;
+    const sum: BureauSummary = report.summary[BUREAUS[bureauIdx] ?? "equifax"] ?? {};
+    let totalAccounts = 0;
+    let openAccounts = 0;
+    for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+      const row = (lines[j] ?? "").trim();
+      // Total row terminates the table
+      if (/^Total\s/.test(row)) {
+        const tm = row.match(/^Total\s+(\d+|N\/A)\s+(\d+|N\/A)\s/);
+        if (tm) {
+          const open = parseCount(tm[1]);
+          const total = parseCount(tm[2]);
+          if (open !== null) sum.openAccounts = open;
+          if (total !== null) sum.totalAccounts = total;
+        }
+        break;
+      }
+      const tm = row.match(/^(Revolving|Mortgage|Installment|Other)\s+(\d+|N\/A)\s+(\d+|N\/A)\s/);
+      if (tm) {
+        const open = parseCount(tm[2]);
+        const total = parseCount(tm[3]);
+        if (open !== null) openAccounts += open;
+        if (total !== null) totalAccounts += total;
+      }
+    }
+    if (sum.totalAccounts === undefined && totalAccounts > 0) sum.totalAccounts = totalAccounts;
+    if (sum.openAccounts === undefined && openAccounts > 0) sum.openAccounts = openAccounts;
+    const bureauKey = BUREAUS[bureauIdx];
+    if (bureauKey) report.summary[bureauKey] = sum;
+    bureauIdx++;
+    if (bureauIdx >= BUREAUS.length) break;
+  }
+}
+
+// ── Accounts ─────────────────────────────────────────────────────
+//
+// Each account starts at "<section>.<num> <Creditor> (<STATUS>)" — e.g.
+// "2.1 Comenity Bank/expres (CLOSED)". The STATUS in the header is the most
+// reliable negative-detection signal:
+//   - OPEN, CLOSED → not necessarily negative on its own
+//   - COLLECTION, CHARGE-OFF, CHARGEOFF, BANKRUPTCY → negative
+//
+// Inside each block, the per-bureau detail rows are space-separated:
+//   "Account Status Closed Closed N/A"
+//   "Credit Limit $500 $500 N/A"
+//   "Reported Balance $0 $0 N/A"
+//
+// We match each account's full block to dig out per-bureau detail.
+//
+// Section numbers:
+//   2 = Revolving · 3 = Mortgage · 4 = Installment · 5 = Other · 11 = Collections
+//
+// Section 11 entries are inherently negative regardless of status text.
+
+const HEADER_RE = /^(\d+)\.(\d+)\s+(.+?)\s+\(([A-Z][A-Z0-9 \-\/]*?)\)\s*$/;
+
+function extractAccounts(lines: string[], report: CreditReport): void {
+  // Find all account headers — keep just the LATEST occurrence of each
+  // "<section>.<idx>" since the TOC duplicates them. The detail block lives
+  // at the second occurrence (or later, when followed by per-bureau columns).
+  type AccountHeader = {
+    line: number;
+    section: number;
+    idx: number;
+    creditor: string;
+    statusToken: string;
+  };
+  const headers: AccountHeader[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    const m = line.match(sectionHeaderRe);
+    const m = (lines[i] ?? "").trim().match(HEADER_RE);
     if (!m) continue;
-    const major = parseInt(m[1]!, 10);
-    if (major < 2 || major > 8) continue; // section 2-7 are account sections; skip TOC + others
-    // Skip TOC entries — they reference page numbers like "(CLOSED)5" with trailing page num
-    // Heuristic: TOC entries appear in the first ~80 lines, body sections appear later
-    const title = m[3]!.trim();
-    const statusMarker = m[4];
-    if (!title) continue;
-    // Skip if this is a TOC line — look at neighboring lines for body markers
-    const next20 = lines.slice(i + 1, i + 20).join("\n");
-    const isBody = /Payment History|Account Number|Account Status|Reported Balance|Credit Limit/i.test(next20);
-    if (!isBody) continue;
-    // Avoid duplicates — only add if this title hasn't appeared yet
-    if (sectionStarts.some((s) => s.title === title && Math.abs(s.idx - i) < 100)) continue;
-    sectionStarts.push({
-      idx: i,
-      title,
-      isClosed: statusMarker === "CLOSED",
+    headers.push({
+      line: i,
+      section: parseInt(m[1]!, 10),
+      idx: parseInt(m[2]!, 10),
+      creditor: m[3]!.trim(),
+      statusToken: m[4]!.trim(),
     });
   }
 
-  // Define each section's slice
-  for (let k = 0; k < sectionStarts.length; k++) {
-    const start = sectionStarts[k]!;
-    const endIdx = sectionStarts[k + 1]?.idx ?? Math.min(start.idx + 200, lines.length);
-    const account = parseAccountSection(lines, start.idx, endIdx, start.title, start.isClosed);
-    if (account) report.accounts.push(account);
+  // Group by section.idx — keep the LAST one (the detail block, not the TOC).
+  const lastByKey = new Map<string, AccountHeader>();
+  for (const h of headers) {
+    const key = `${h.section}.${h.idx}`;
+    lastByKey.set(key, h);
+  }
+
+  // Sort by section then idx so output order matches the report
+  const detailHeaders = Array.from(lastByKey.values()).sort((a, b) =>
+    a.section === b.section ? a.idx - b.idx : a.section - b.section
+  );
+
+  for (let h = 0; h < detailHeaders.length; h++) {
+    const header = detailHeaders[h]!;
+    const next = detailHeaders[h + 1];
+    const blockEnd = next?.line ?? lines.length;
+    const block = lines.slice(header.line + 1, blockEnd);
+
+    const isCollectionsSection = header.section === 11;
+    const isHeaderNegative = NEGATIVE_STATUS_TOKENS.some((t) => header.statusToken.includes(t));
+
+    const detail = parseAccountBlock(block, header);
+    const blockNegative = detail.blockNegativeFlag;
+
+    const isNeg = isCollectionsSection || isHeaderNegative || blockNegative;
+    const category = pickCategory(header.statusToken, blockNegative, isCollectionsSection);
+
+    report.accounts.push({
+      creditor: header.creditor,
+      category,
+      isNegative: isNeg,
+      bureaus: detail.bureaus,
+    });
   }
 }
 
-function parseAccountSection(
-  lines: string[],
-  startIdx: number,
-  endIdx: number,
-  title: string,
-  isClosed: boolean
-): Account | null {
-  // Find the EquifaxExperianTransUnion bureau header within the section
-  let headerIdx = -1;
-  for (let i = startIdx; i < endIdx; i++) {
-    if (lines[i] === BUREAU_HEADER) {
-      headerIdx = i;
-      break;
-    }
-  }
-  if (headerIdx === -1) return null;
+interface ParsedAccountBlock {
+  bureaus: Partial<Record<Bureau, BureauAccountDetail>>;
+  blockNegativeFlag: boolean;
+}
 
-  // Walk forward extracting fields
-  const fields = new Map<string, string>();
-  const FIELD_LABELS = [
-    "Reported",
-    "Account Number",
-    "Account Type",
-    "Account Status",
-    "Account Ownership",
-    "Date Opened",
-    "Date Last Active",
-    "Date Last Reported",
-    "Date Last Payment",
-    "Last Reported",
-    "Credit Limit",
-    "Reported Balance",
-    "Balance",
-    "Past Due Amount",
-    "Past Due",
-    "High Balance",
-    "Charge Off Amount",
-    "Months Reviewed",
-    "Monthly Payment",
-    "Last Activity",
-  ];
-
-  for (let i = headerIdx + 1; i < endIdx; i++) {
-    const line = lines[i] ?? "";
-    if (!line) continue;
-    if (line === BUREAU_HEADER) continue;
-    // Skip year row patterns (Year + month columns)
-    if (/^Year/.test(line) && line.length > 30) continue;
-
-    for (const label of FIELD_LABELS) {
-      if (!line.startsWith(label)) continue;
-      const value = line.slice(label.length).trim();
-      if (value && !fields.has(label)) {
-        fields.set(label, value);
-      }
-      break;
-    }
-  }
-
-  // Build per-bureau details
-  const bureaus: Partial<Record<Bureau, BureauAccountDetail>> = {};
-  const perBureauCat: Partial<Record<Bureau, AccountCategory>> = {};
-
-  // Account Number is concatenated with potentially "N/A" markers
-  // e.g., "xxxxxxxxxxxxxxxx 4AU7N/Axxxxxxxxxxxxxx 4AU7"
-  const accountNumberRaw = fields.get("Account Number") ?? "";
-  const accountNumberParts = splitConcatField(accountNumberRaw);
-
-  // Account Status: "ClosedN/AClosed" or "OpenN/AOpen"
-  const accountStatusParts = splitConcatField(fields.get("Account Status") ?? "");
-
-  // Credit Limit: "$0N/A$0" → ["$0", "N/A", "$0"]
-  const creditLimitParts = splitConcatField(fields.get("Credit Limit") ?? "");
-  const reportedBalanceParts = splitConcatField((fields.get("Reported Balance") ?? "") || (fields.get("Balance") ?? ""));
-  const pastDueParts = splitConcatField(fields.get("Past Due Amount") ?? fields.get("Past Due") ?? "");
-  const monthlyPaymentParts = splitConcatField(fields.get("Monthly Payment") ?? "");
-  const dateOpenedParts = splitConcatField(fields.get("Date Opened") ?? "");
-  const dateLastActiveParts = splitConcatField(fields.get("Date Last Active") ?? fields.get("Last Activity") ?? "");
-  const lastReportedParts = splitConcatField(fields.get("Date Last Reported") ?? fields.get("Last Reported") ?? "");
-
-  // Get the entire section text for keyword scanning
-  const sectionText = lines.slice(startIdx, endIdx).join("\n");
-
-  for (let bIdx = 0; bIdx < BUREAU_ORDER.length; bIdx++) {
-    const bureau = BUREAU_ORDER[bIdx]!;
-    const detail: BureauAccountDetail = {
-      accountNumber: cleanNA(accountNumberParts[bIdx]),
-      accountStatus: cleanNA(accountStatusParts[bIdx]),
-      creditLimit: parseDollar(creditLimitParts[bIdx]),
-      balance: parseDollar(reportedBalanceParts[bIdx]),
-      pastDue: parseDollar(pastDueParts[bIdx]),
-      monthlyPayment: parseDollar(monthlyPaymentParts[bIdx]),
-      dateOpened: cleanNA(dateOpenedParts[bIdx]),
-      lastPayment: cleanNA(dateLastActiveParts[bIdx]),
-      lastReported: cleanNA(lastReportedParts[bIdx]),
-    };
-    bureaus[bureau] = detail;
-    perBureauCat[bureau] = categorizeFromSectionContext(detail, sectionText, isClosed);
-  }
-
-  const category = rollupCategory(perBureauCat);
-
-  // Apply title-based override: if title says (CLOSED) and category is unknown, mark as closed
-  let finalCategory: AccountCategory = category;
-  if (category === "unknown") {
-    if (isClosed) finalCategory = "closed";
-    else finalCategory = "current";
-  }
-
-  return {
-    creditor: title,
-    category: finalCategory,
-    isNegative: isNegativeCategory(finalCategory),
-    bureaus,
+function parseAccountBlock(block: string[], header: { creditor: string }): ParsedAccountBlock {
+  const bureaus: Partial<Record<Bureau, BureauAccountDetail>> = {
+    equifax: {},
+    experian: {},
+    transunion: {},
   };
-}
+  let blockNegativeFlag = false;
 
-/**
- * Split a 3-bureau concatenated field. Handles N/A markers.
- * E.g., "xxx 4AU7N/Axxx 4AU7" → ["xxx 4AU7", "N/A", "xxx 4AU7"]
- *       "ClosedN/AClosed" → ["Closed", "N/A", "Closed"]
- *       "$0N/A$0" → ["$0", "N/A", "$0"]
- */
-function splitConcatField(s: string): [string, string, string] {
-  if (!s) return ["", "", ""];
-  const trimmed = s.trim();
+  // Walk the block, matching label+3-bureau-values rows.
+  for (let i = 0; i < block.length; i++) {
+    const row = (block[i] ?? "").trim();
+    if (!row) continue;
 
-  // Look for N/A separators
-  const naPattern = /N\/A/g;
-  const naMatches = [...trimmed.matchAll(naPattern)];
+    // Three-column pattern: "<Label> <eq> <ex> <tu>"
+    const m = row.match(/^([A-Za-z][A-Za-z0-9 \-\/]+?)\s{1,}([A-Za-z0-9$,.\-\/]+(?:\s[A-Za-z0-9$,.\-]+)?)\s+([A-Za-z0-9$,.\-\/]+(?:\s[A-Za-z0-9$,.\-]+)?)\s+([A-Za-z0-9$,.\-\/]+(?:\s[A-Za-z0-9$,.\-]+)?)\s*$/);
+    if (!m) continue;
+    const label = (m[1] ?? "").trim();
+    const eq = (m[2] ?? "").trim();
+    const ex = (m[3] ?? "").trim();
+    const tu = (m[4] ?? "").trim();
 
-  if (naMatches.length > 0) {
-    // Split on N/A markers — at least one bureau didn't report
-    // Find positions of N/A and split around them
-    const parts: string[] = [];
-    let lastIdx = 0;
-    for (const match of naMatches) {
-      const before = trimmed.slice(lastIdx, match.index!);
-      if (before) parts.push(before);
-      parts.push("N/A");
-      lastIdx = match.index! + 3;
+    // Negative-status indicator rows — non-zero counts mean negative history
+    const lowerLabel = label.toLowerCase();
+    if (
+      lowerLabel === "collection account" ||
+      lowerLabel === "charge off" ||
+      lowerLabel === "included in bankruptcy" ||
+      /past due/.test(lowerLabel)
+    ) {
+      if (parseNonZero(eq) || parseNonZero(ex) || parseNonZero(tu)) {
+        blockNegativeFlag = true;
+      }
+      continue;
     }
-    const after = trimmed.slice(lastIdx);
-    if (after) parts.push(after);
 
-    // Pad to 3 parts if needed
-    while (parts.length < 3) parts.push("");
-    return [parts[0] ?? "", parts[1] ?? "", parts[2] ?? ""];
+    // Map labels to BureauAccountDetail fields
+    assignField(bureaus.equifax!, label, eq);
+    assignField(bureaus.experian!, label, ex);
+    assignField(bureaus.transunion!, label, tu);
   }
 
-  // No N/A — try equal split if length divisible by 3
-  if (trimmed.length % 3 === 0 && trimmed.length > 0) {
-    const len = trimmed.length / 3;
-    const a = trimmed.slice(0, len);
-    const b = trimmed.slice(len, len * 2);
-    const c = trimmed.slice(len * 2);
-    if (a === b && b === c) {
-      return [a, b, c];
+  // Drop bureaus with no useful data
+  for (const b of BUREAUS) {
+    const d = bureaus[b];
+    if (!d || Object.keys(d).length === 0) delete bureaus[b];
+  }
+
+  return { bureaus, blockNegativeFlag };
+}
+
+function parseNonZero(s: string): boolean {
+  if (!s) return false;
+  if (/^N\/A$/i.test(s) || /^0$/.test(s) || s === "$0" || s === "-") return false;
+  // numeric or dollar — non-zero means hit
+  const n = parseInt(s.replace(/[$,]/g, ""), 10);
+  return Number.isFinite(n) && n > 0;
+}
+
+function assignField(detail: BureauAccountDetail, label: string, value: string) {
+  if (!value || value === "N/A" || value === "-") return;
+  const v = value.trim();
+  switch (label) {
+    case "Account Number":
+      detail.accountNumber = v;
+      return;
+    case "Account Status":
+    case "Status":
+      detail.accountStatus = v;
+      return;
+    case "Activity Designator":
+      detail.accountCondition = v;
+      return;
+    case "Account Type":
+      detail.accountType = v;
+      return;
+    case "Loan Type":
+      detail.loanType = v;
+      return;
+    case "Date Opened":
+      detail.dateOpened = v;
+      return;
+    case "Date Closed":
+      detail.dateClosed = v;
+      return;
+    case "Date Reported":
+      detail.lastReported = v;
+      return;
+    case "Credit Limit":
+      detail.creditLimit = parseDollar(v);
+      return;
+    case "Reported Balance":
+    case "Balance":
+      detail.balance = parseDollar(v);
+      return;
+    case "High Credit":
+    case "High Balance":
+      detail.highCredit = parseDollar(v);
+      return;
+    case "Monthly Payment Amount":
+    case "Monthly Payment":
+      detail.monthlyPayment = parseDollar(v);
+      return;
+    case "Amount Past Due":
+    case "Past Due":
+      detail.pastDue = parseDollar(v);
+      return;
+    case "Charge Off Amount":
+      detail.chargeOffAmount = parseDollar(v);
+      return;
+  }
+}
+
+// ── Collections section (Section 11) ────────────────────────────
+//
+// Custom layout — not the standard "X.Y Creditor (STATUS)" header. Instead:
+//
+//   11. Collections
+//   <narrative>
+//   TransUnion          ← bureau header
+//   Date Reported: <date>
+//   Agency Client: <CREDITOR>
+//   Equifax             ← next bureau header
+//   Date Reported: <date>
+//   Agency Client: <CREDITOR>
+//   ...
+//   <per-collection detail blocks>
+//
+// Each "Agency Client: X" with a preceding "Date Reported: Y" is a separate
+// collection. Bureau context resets when we hit a bureau header line.
+
+function extractCollectionsSection(lines: string[], report: CreditReport): void {
+  const startIdx = lines.findIndex((l) => /^\s*11\.\s*Collections\s*$/.test((l ?? "").trim()));
+  if (startIdx === -1) return;
+
+  // The collections section ends at "12." or end-of-file
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^\s*12\.\s/.test((lines[i] ?? "").trim())) {
+      endIdx = i;
+      break;
     }
   }
 
-  // Fall back: assign whole value to all 3
-  return [trimmed, trimmed, trimmed];
+  let currentBureau: Bureau | null = null;
+  let pendingDateReported: string | null = null;
+
+  for (let i = startIdx + 1; i < endIdx; i++) {
+    const line = (lines[i] ?? "").trim();
+
+    // Bureau header line — exact match, no other content
+    if (/^Equifax$/i.test(line)) { currentBureau = "equifax"; continue; }
+    if (/^Experian$/i.test(line)) { currentBureau = "experian"; continue; }
+    if (/^TransUnion$/i.test(line)) { currentBureau = "transunion"; continue; }
+
+    const dateMatch = line.match(/^Date Reported:\s*(.+)$/);
+    if (dateMatch) {
+      pendingDateReported = dateMatch[1]?.trim() ?? null;
+      continue;
+    }
+
+    const agencyMatch = line.match(/^Agency Client:\s*(.+)$/);
+    if (agencyMatch && currentBureau) {
+      const creditor = (agencyMatch[1] ?? "").trim();
+      if (!creditor) continue;
+      const detail: BureauAccountDetail = {
+        accountStatus: "Collection",
+        paymentStatus: "Collection",
+        accountType: "COLLECTION",
+        lastReported: pendingDateReported ?? undefined,
+      };
+      report.accounts.push({
+        creditor,
+        category: "collection",
+        isNegative: true,
+        bureaus: { [currentBureau]: detail },
+      });
+      pendingDateReported = null;
+    }
+  }
 }
 
-function cleanNA(s: string | undefined): string | undefined {
-  if (!s) return undefined;
-  if (s === "N/A" || s === "" || s === "--") return undefined;
-  return s;
-}
+// ── Category mapping ────────────────────────────────────────────
 
-function categorizeFromSectionContext(
-  detail: BureauAccountDetail,
-  sectionText: string,
-  isClosedHeader: boolean
+function pickCategory(
+  headerStatus: string,
+  blockNegativeFlag: boolean,
+  isCollectionsSection: boolean
 ): AccountCategory {
-  // Section-text keyword scanning
-  if (sectionText) {
-    if (/COLLECTION/i.test(sectionText)) return "collection";
-    if (/CHARGED?\s*-?OFF|CHARGE.?OFF/i.test(sectionText) && !/CHARGE OFF AMOUNT[\s$]*0/i.test(sectionText)) {
-      // Check if charge-off is a real flag, not just a "$0" placeholder
-      if (/CHARGE.?OFF/i.test(sectionText)) return "chargeoff";
-    }
-    if (/FORECLOSURE/i.test(sectionText)) return "foreclosure";
-    if (/REPOSSESS/i.test(sectionText)) return "repossession";
-    if (/BANKRUPT/i.test(sectionText)) return "bankruptcy";
-
-    if (/150 days late|150\+/i.test(sectionText)) return "late150";
-    if (/120 days late/i.test(sectionText)) return "late120";
-    if (/90 days late/i.test(sectionText)) return "late90";
-    if (/60 days late/i.test(sectionText)) return "late60";
-    if (/30 days late/i.test(sectionText)) return "late30";
+  const upper = headerStatus.toUpperCase();
+  if (isCollectionsSection) return "collection";
+  if (upper.includes("CHARGE")) return "chargeoff";
+  if (upper.includes("COLLECTION")) return "collection";
+  if (upper.includes("BANKRUPTCY")) return "bankruptcy";
+  if (upper.includes("FORECLOSURE")) return "foreclosure";
+  if (upper.includes("REPOSSESSION")) return "repossession";
+  if (upper.includes("PAST DUE") || upper.includes("DELINQUENT")) {
+    if (upper.includes("150")) return "late150";
+    if (upper.includes("120")) return "late120";
+    if (upper.includes("90")) return "late90";
+    if (upper.includes("60")) return "late60";
+    if (upper.includes("30")) return "late30";
+    return "late30";
   }
-
-  // Past Due > 0 = negative
-  if ((detail.pastDue ?? 0) > 0) return "late30";
-
-  // Charge Off Amount > 0 = chargeoff
-  if ((detail.chargeOffAmount ?? 0) > 0) return "chargeoff";
-
-  // Status fallback
-  if (detail.accountStatus) {
-    const s = detail.accountStatus.toLowerCase();
-    if (s.includes("collection")) return "collection";
-    if (s.includes("charge")) return "chargeoff";
-    if (s.includes("late")) return "late30";
-    if (s === "closed") {
-      // Closed alone isn't necessarily negative — but if past due / charge off / collection markers exist
-      return "closed";
-    }
-    if (s === "open") return "current";
-  }
-
-  if (isClosedHeader) return "closed";
+  if (blockNegativeFlag) return "late30"; // generic late if unknown specifics
+  if (upper === "CLOSED") return "closed";
+  if (upper === "OPEN") return "current";
   return "unknown";
-}
-
-function parseInquiries(lines: string[], report: CreditReport): void {
-  // Find "9. Inquiries" section
-  const inqIdx = lines.findIndex((l) => /^9\.\s*Inquiries/i.test(l));
-  if (inqIdx === -1) return;
-
-  // Walk forward looking for inquiry entries until next major section
-  for (let i = inqIdx + 1; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (/^1[0-9]\.\s/.test(line)) break; // hit "10. Public Records" etc
-
-    // Date pattern at start of line indicates an inquiry
-    const m = line.match(/^([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})\s*(.*)$/);
-    if (m) {
-      report.inquiries.push({
-        bureau: "equifax", // bureau detection requires more context
-        creditor: m[2]?.trim() || "Unknown",
-        date: m[1] ?? "",
-      });
-    }
-  }
-}
-
-function parsePublicRecords(lines: string[], report: CreditReport): void {
-  const prIdx = lines.findIndex((l) => /^10\.\s*Public Records/i.test(l));
-  if (prIdx === -1) return;
-
-  for (let i = prIdx + 1; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (/^1[1-9]\.\s/.test(line)) break;
-    if (/^\d+\.\d+\s/.test(line)) {
-      // sub-section like "10.1 Bankruptcy"
-      const title = line.replace(/^\d+\.\d+\s/, "").trim();
-      report.publicRecords.push({
-        bureau: "equifax",
-        type: title,
-      });
-    }
-  }
 }
