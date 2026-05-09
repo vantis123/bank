@@ -74,6 +74,7 @@ export function computeScorecard(report: CreditReport): Scorecard {
     creditScoreCriterion(report),
     negativesCriterion(report),
     latesCriterion(report),
+    inquiriesCriterion(report),
     openAccountsCriterion(report),
     accountAgeCriterion(report),
     utilizationCriterion(report),
@@ -193,6 +194,25 @@ function latesCriterion(report: CreditReport): CriterionGrade {
     id: "no-lates-24mo",
     label: "No late payments in past 2 years",
     hint: "Even one late is a red flag",
+    status,
+    bureaus,
+  };
+}
+
+function inquiriesCriterion(report: CreditReport): CriterionGrade {
+  const bureaus = mapBureaus((b) => {
+    const n = report.summary[b]?.inquiries;
+    if (n === undefined || n === null) return { value: "—", status: "unknown" };
+    return {
+      value: String(n),
+      status: n < 2 ? "pass" : "fail",
+    };
+  });
+  const status = aggregateStatus(bureaus);
+  return {
+    id: "inquiries-under-2",
+    label: "Under 2 hard inquiries per bureau",
+    hint: "Recent inquiries signal credit shopping",
     status,
     bureaus,
   };
