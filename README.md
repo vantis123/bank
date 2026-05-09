@@ -27,26 +27,46 @@ Two ways to use it. **Same engine.** Pick the door that fits how you work.
 
 ---
 
-## Door 1 — Dashboard (no AI required)
+## How to install Bank (5 minutes, one time)
 
-A local webpage. You drop in client creds, watch a real browser log in and pull the report, and download the PDF.
+You don't need to know any code. Just follow these three steps.
 
-```bash
-git clone https://github.com/vantis123/bank.git
-cd bank
-npm install
-npm start
-```
+### Step 1 — Install Node.js (skip if you already have it)
 
-Browser auto-opens to `http://localhost:7878`. That's it.
+Bank runs on a free program called Node.js. Get it here:
 
-> **Mac shortcut:** double-click `Run Bank.command` after unzipping. It handles `npm install` + `npm start` for you.
->
-> **Windows shortcut:** double-click `Run Bank.bat` after unzipping. Same one-click experience, runs through cmd so PowerShell's execution policy never gets in the way.
+→ **[nodejs.org/en/download](https://nodejs.org/en/download)**
 
-> **Don't have Node.js yet?** Grab the LTS version from [nodejs.org](https://nodejs.org/en/download) first (5 minutes, one-time setup).
+Click the big green **LTS** button. Run the installer. Click *Next* through every screen. Done.
 
-See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough if you've never used a terminal.
+### Step 2 — Download Bank
+
+1. At the top of this page, click the green **`< > Code`** button.
+2. In the dropdown, click **Download ZIP**.
+3. Open your **Downloads** folder. Find `bank-main.zip` and double-click it to unzip.
+4. You'll get a folder called **`bank-main`**. That's Bank.
+
+### Step 3 — Open Bank
+
+**On a Mac:**
+- Open the `bank-main` folder.
+- Double-click **`Run Bank.command`**.
+- *First time only:* if Mac says *"cannot be opened because Apple cannot check it"*, close that popup, **right-click** `Run Bank.command` → click **Open** → click **Open** again. Mac won't ask again after this.
+- A black window opens. Wait ~3 minutes the first time (it's downloading parts).
+- Your web browser pops open to **Bank**. You're ready.
+
+**On Windows:**
+- Open the `bank-main` folder.
+- Double-click **`Run Bank.bat`**.
+- *First time only:* if Windows says *"Windows protected your PC"*, click **More info** → **Run anyway**.
+- A black window opens. Wait ~3 minutes the first time (it's downloading parts).
+- Your web browser pops open to **Bank**. You're ready.
+
+### Step 4 — Every time after that
+
+Just open the `bank-main` folder and double-click `Run Bank.command` (Mac) or `Run Bank.bat` (Windows). It only does the long setup once.
+
+> Need more detail or stuck somewhere? See **[INSTALL.md](INSTALL.md)** for the deep walkthrough with troubleshooting for every common issue.
 
 ---
 
