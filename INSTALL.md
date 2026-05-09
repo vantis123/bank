@@ -26,14 +26,18 @@ After unzipping the Bank zip:
 3. Drag the Bank folder from Finder into the Terminal window
 4. Hit Enter
 
-**Windows:**
+**Windows (easiest):** open the Bank folder in File Explorer → double-click **`Run Bank.bat`**. That handles everything below for you (skip to "Run Bank" — your browser will open in ~3 min the first time).
+
+**Windows (manual):**
 1. Right-click the Bank folder → "Open in Terminal"
 
 > **PowerShell quirk:** if you see `npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on this system`, that's Windows blocking npm scripts by default. Two fixes — pick one:
 >
-> **Easiest:** type `cmd` and hit Enter — that drops you into the older command-prompt shell where npm just works. Then continue with the steps below.
+> **Easiest:** type `cmd` and hit Enter (just `cmd` by itself, nothing after it). That drops you into the older command-prompt shell where npm just works. Then continue with the steps below.
 >
 > **Permanent fix:** in PowerShell, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`, hit Y to confirm. Restart the terminal, npm now works in PowerShell forever.
+>
+> **Easiest of all:** just use `Run Bank.bat` (double-click in File Explorer) and skip the terminal entirely.
 
 ---
 

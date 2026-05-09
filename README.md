@@ -41,6 +41,8 @@ npm start
 Browser auto-opens to `http://localhost:7878`. That's it.
 
 > **Mac shortcut:** double-click `Run Bank.command` after unzipping. It handles `npm install` + `npm start` for you.
+>
+> **Windows shortcut:** double-click `Run Bank.bat` after unzipping. Same one-click experience, runs through cmd so PowerShell's execution policy never gets in the way.
 
 > **Don't have Node.js yet?** Grab the LTS version from [nodejs.org](https://nodejs.org/en/download) first (5 minutes, one-time setup).
 
