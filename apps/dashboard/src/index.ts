@@ -141,16 +141,33 @@ app.listen(PORT, () => {
   console.log(`  Sandbox:  ${SANDBOX_DIR}`);
   console.log(`  Reports:  ${REPORTS_DIR}\n`);
 
-  // Auto-open in default browser on macOS / Linux / WSL
+  // Auto-open in default browser. `start` on Windows is a cmd.exe builtin,
+  // not an executable, so it has to be invoked via cmd /c. Wrapping in
+  // try/catch + child error handler so a failed open never takes down the
+  // server — the URL is already logged either way.
   if (process.env.BANK_NO_OPEN !== "1" && existsSync(PUBLIC_DIR)) {
     import("node:child_process").then(({ spawn }) => {
-      const opener =
-        process.platform === "darwin"
-          ? "open"
-          : process.platform === "win32"
-          ? "start"
-          : "xdg-open";
-      spawn(opener, [url], { detached: true, stdio: "ignore" }).unref();
-    });
+      try {
+        let cmd: string;
+        let args: string[];
+        if (process.platform === "win32") {
+          cmd = "cmd.exe";
+          args = ["/c", "start", "", url];
+        } else if (process.platform === "darwin") {
+          cmd = "open";
+          args = [url];
+        } else {
+          cmd = "xdg-open";
+          args = [url];
+        }
+        const child = spawn(cmd, args, { detached: true, stdio: "ignore", shell: false });
+        child.on("error", () => {
+          // Browser open failed — that's OK, the URL is already in the console
+        });
+        child.unref();
+      } catch {
+        // Same — never crash the server because of a browser-open issue
+      }
+    }).catch(() => {});
   }
 });

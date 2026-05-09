@@ -29,6 +29,12 @@ After unzipping the Bank zip:
 **Windows:**
 1. Right-click the Bank folder → "Open in Terminal"
 
+> **PowerShell quirk:** if you see `npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on this system`, that's Windows blocking npm scripts by default. Two fixes — pick one:
+>
+> **Easiest:** type `cmd` and hit Enter — that drops you into the older command-prompt shell where npm just works. Then continue with the steps below.
+>
+> **Permanent fix:** in PowerShell, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`, hit Y to confirm. Restart the terminal, npm now works in PowerShell forever.
+
 ---
 
 ## Step 3 — One-time setup (~3 min)
