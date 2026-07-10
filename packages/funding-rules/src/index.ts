@@ -53,6 +53,21 @@ export interface Scorecard {
 
 const BUREAUS: readonly Bureau[] = ["equifax", "experian", "transunion"] as const;
 
+// Criteria that gate the funding verdict (the QUALIFIED minimum). If any of
+// these fails, is mixed across bureaus, or can't be read (unknown), the client
+// must be referred to credit repair — a funding tool fails CLOSED, never grades
+// missing or negative data as fundable. Inquiries is informational, not gating.
+const GATING_CRITERIA_IDS = new Set([
+  "credit-score",
+  "negatives",
+  "no-lates-24mo",
+  "open-accounts",
+  "avg-age-3yr",
+  "per-card-utilization",
+  "card-5k",
+  "card-10k",
+]);
+
 const NEGATIVE_CATEGORIES = new Set([
   "collection",
   "chargeoff",
@@ -102,11 +117,24 @@ export function computeScorecard(report: CreditReport): Scorecard {
 }
 
 function computeVerdict(criteria: CriterionGrade[]): Verdict {
-  const hasFail = criteria.some((c) => c.status === "fail");
-  if (hasFail) return "refer-credit-repair";
+  const gating = criteria.filter((c) => GATING_CRITERIA_IDS.has(c.id));
+
+  // Fail closed: a gating criterion that fails, is split across bureaus (mixed),
+  // or can't be read (unknown, e.g. a thin/failed parse) blocks qualification.
+  // A single-bureau collection surfaces here as fail (see negativesCriterion) or
+  // mixed — either way the client is referred, never graded qualified.
+  const gatingBlocked = gating.some(
+    (c) => c.status === "fail" || c.status === "mixed" || c.status === "unknown"
+  );
+  if (gatingBlocked) return "refer-credit-repair";
+
+  // Ideal requires every criterion (including the informational ones) to pass
+  // cleanly across all three bureaus.
   const allPass = criteria.every((c) => c.status === "pass");
   if (allPass) return "ideal";
-  return "qualified"; // pass + mixed but no fail
+
+  // All gating criteria pass, but a non-gating item (e.g. inquiries) is flagged.
+  return "qualified";
 }
 
 function formatVerdict(
@@ -168,7 +196,9 @@ function negativesCriterion(report: CreditReport): CriterionGrade {
       status: negsOnBureau.length === 0 ? "pass" : "fail",
     };
   });
-  const status = aggregateStatus(bureaus);
+  // Gating: any single-bureau negative is a criterion fail. Do NOT soften a
+  // one-bureau collection to "mixed" — that leaked past the refer verdict.
+  const status = aggregateGatingStatus(bureaus);
   return {
     id: "negatives",
     label: "No accounts in collections",
@@ -189,7 +219,8 @@ function latesCriterion(report: CreditReport): CriterionGrade {
       status: latesOnBureau.length === 0 ? "pass" : "fail",
     };
   });
-  const status = aggregateStatus(bureaus);
+  // Gating: any single-bureau late is a criterion fail (same leak as negatives).
+  const status = aggregateGatingStatus(bureaus);
   return {
     id: "no-lates-24mo",
     label: "No late payments in past 2 years",
@@ -369,6 +400,16 @@ function aggregateStatus(bureaus: Record<Bureau, BureauGrade>): CriterionStatus 
   if (anyPass) return "pass"; // some pass, rest unknown — call it pass
   if (anyFail) return "fail"; // some fail, rest unknown — call it fail
   return "unknown";
+}
+
+// Stricter roll-up for gating criteria where a single bad bureau must not be
+// diluted. Any bureau fail → the whole criterion fails; any unread bureau →
+// unknown (fail closed downstream); only an all-clear reads as pass.
+function aggregateGatingStatus(bureaus: Record<Bureau, BureauGrade>): CriterionStatus {
+  const statuses = BUREAUS.map((b) => bureaus[b].status);
+  if (statuses.some((s) => s === "fail")) return "fail";
+  if (statuses.some((s) => s === "unknown")) return "unknown";
+  return "pass";
 }
 
 function formatMonths(m: number): string {
